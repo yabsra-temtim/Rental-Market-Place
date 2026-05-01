@@ -5,7 +5,6 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  TextField,
   Typography,
   Box,
   Alert,
@@ -13,7 +12,7 @@ import {
 } from '@mui/material';
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
-import { format, differenceInDays, isBefore, startOfDay } from 'date-fns';
+import { format, differenceInDays, startOfDay } from 'date-fns';
 import { bookingService } from '../services/api';
 
 const BookingForm = ({ open, onClose, item, onSuccess }) => {
@@ -36,8 +35,16 @@ const BookingForm = ({ open, onClose, item, onSuccess }) => {
       return;
     }
 
-    if (isBefore(endDate, startDate)) {
+    const start = startOfDay(startDate);
+    const end = startOfDay(endDate);
+
+    if (end <= start) {
       setError('End date must be after start date');
+      return;
+    }
+
+    if (differenceInDays(end, start) < 1) {
+      setError('Minimum rental period is 1 day');
       return;
     }
 
@@ -47,13 +54,16 @@ const BookingForm = ({ open, onClose, item, onSuccess }) => {
     try {
       const response = await bookingService.create({
         itemId: item._id,
-        startDate: startDate.toISOString(),
-        endDate: endDate.toISOString(),
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
         totalPrice: calculateTotal(),
       });
       
       onSuccess(response.data);
       onClose();
+      // Reset form
+      setStartDate(null);
+      setEndDate(null);
     } catch (error) {
       setError(error.response?.data?.message || 'Failed to create booking');
     } finally {
@@ -61,12 +71,18 @@ const BookingForm = ({ open, onClose, item, onSuccess }) => {
     }
   };
 
+  const isDateAvailable = ({ date }) => {
+    // Add logic to check if date is already booked
+    // This would require fetching existing bookings for the item
+    return true; // Placeholder
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
       <DialogTitle>Book {item.title}</DialogTitle>
       <DialogContent>
         {error && (
-          <Alert severity="error" sx={{ mb: 2 }}>
+          <Alert severity="error" sx={{ mb: 2, mt: 1 }}>
             {error}
           </Alert>
         )}
@@ -78,7 +94,8 @@ const BookingForm = ({ open, onClose, item, onSuccess }) => {
           <Calendar
             onChange={setStartDate}
             value={startDate}
-            minDate={new Date()}
+            minDate={startOfDay(new Date())}
+            tileDisabled={({ date }) => !isDateAvailable({ date })}
             className="booking-calendar"
           />
         </Box>
@@ -90,7 +107,8 @@ const BookingForm = ({ open, onClose, item, onSuccess }) => {
           <Calendar
             onChange={setEndDate}
             value={endDate}
-            minDate={startDate || new Date()}
+            minDate={startDate || startOfDay(new Date())}
+            tileDisabled={({ date }) => !isDateAvailable({ date })}
             className="booking-calendar"
           />
         </Box>
@@ -98,13 +116,13 @@ const BookingForm = ({ open, onClose, item, onSuccess }) => {
         {startDate && endDate && (
           <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.100', borderRadius: 1 }}>
             <Typography variant="body2">
-              Start: {format(startDate, 'PPP')}
+              <strong>Start:</strong> {format(startDate, 'PPP')}
             </Typography>
             <Typography variant="body2">
-              End: {format(endDate, 'PPP')}
+              <strong>End:</strong> {format(endDate, 'PPP')}
             </Typography>
             <Typography variant="body2">
-              Duration: {differenceInDays(endDate, startDate)} days
+              <strong>Duration:</strong> {differenceInDays(endDate, startDate)} days
             </Typography>
             <Typography variant="h6" color="primary" sx={{ mt: 1 }}>
               Total: ${calculateTotal()}

@@ -4,19 +4,20 @@ import {
   Grid,
   Typography,
   TextField,
-  Select,
-  MenuItem,
-  FormControl,
-  InputLabel,
   Box,
-  CircularProgress,
+  Pagination,
+  Alert,
 } from '@mui/material';
 import { itemService } from '../services/api';
 import ItemCard from '../components/ItemCard';
+import { LoadingGrid } from '../components/LoadingSkeleton';
 
 const Home = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
   const [filters, setFilters] = useState({
     category: '',
     location: '',
@@ -25,32 +26,52 @@ const Home = () => {
   });
 
   useEffect(() => {
-    fetchItems();
-  }, [filters]);
+    let isMounted = true;
+    
+    const fetchItems = async () => {
+      try {
+        setLoading(true);
+        setError('');
+        const response = await itemService.getAll({
+          ...filters,
+          page,
+          limit: 12
+        });
+        
+        if (isMounted) {
+          setItems(response.data.items || []);
+          setTotalPages(response.data.totalPages || 1);
+        }
+      } catch (error) {
+        console.error('Failed to fetch items:', error);
+        if (isMounted) {
+          setError(error.response?.data?.message || 'Failed to load items');
+        }
+      } finally {
+        if (isMounted) setLoading(false);
+      }
+    };
 
-  const fetchItems = async () => {
-    try {
-      const response = await itemService.getAll(filters);
-      setItems(response.data);
-    } catch (error) {
-      console.error('Failed to fetch items:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+    fetchItems();
+    
+    return () => {
+      isMounted = false;
+    };
+  }, [page, filters]);
 
   const handleFilterChange = (e) => {
     setFilters({
       ...filters,
       [e.target.name]: e.target.value,
     });
+    setPage(1); // Reset to first page on filter change
   };
 
-  if (loading) {
+  if (loading && page === 1) {
     return (
-      <Box display="flex" justifyContent="center" alignItems="center" minHeight="100vh">
-        <CircularProgress />
-      </Box>
+      <Container maxWidth="lg" sx={{ mt: 4 }}>
+        <LoadingGrid />
+      </Container>
     );
   }
 
@@ -59,6 +80,12 @@ const Home = () => {
       <Typography variant="h4" gutterBottom>
         Available Rentals
       </Typography>
+      
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
+          {error}
+        </Alert>
+      )}
       
       {/* Filters */}
       <Box sx={{ mb: 4, display: 'flex', gap: 2, flexWrap: 'wrap' }}>
@@ -87,18 +114,35 @@ const Home = () => {
         />
       </Box>
 
-      <Grid container spacing={3}>
-        {items.map((item) => (
-          <Grid item xs={12} sm={6} md={4} key={item._id}>
-            <ItemCard item={item} />
+      {loading && page > 1 ? (
+        <LoadingGrid />
+      ) : (
+        <>
+          <Grid container spacing={3}>
+            {items.map((item) => (
+              <Grid item xs={12} sm={6} md={4} key={item._id}>
+                <ItemCard item={item} />
+              </Grid>
+            ))}
           </Grid>
-        ))}
-      </Grid>
 
-      {items.length === 0 && (
-        <Typography variant="body1" textAlign="center" mt={4}>
-          No items found. Try adjusting your filters.
-        </Typography>
+          {items.length === 0 && !loading && (
+            <Typography variant="body1" textAlign="center" mt={4}>
+              No items found. Try adjusting your filters.
+            </Typography>
+          )}
+
+          {totalPages > 1 && (
+            <Box display="flex" justifyContent="center" mt={4}>
+              <Pagination
+                count={totalPages}
+                page={page}
+                onChange={(e, value) => setPage(value)}
+                color="primary"
+              />
+            </Box>
+          )}
+        </>
       )}
     </Container>
   );
